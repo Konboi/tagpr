@@ -65,3 +65,59 @@ func TestConfig(t *testing.T) {
 		t.Errorf("got:\n%s\nexpect:\n%s", out, expect)
 	}
 }
+
+func TestFixMajorVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		want     *uint64
+	}{
+		{
+			name:     "not set",
+			envValue: "",
+			want:     nil,
+		},
+		{
+			name:     "numeric format",
+			envValue: "1",
+			want:     func() *uint64 { v := uint64(1); return &v }(),
+		},
+		{
+			name:     "v-prefixed format",
+			envValue: "v2",
+			want:     func() *uint64 { v := uint64(2); return &v }(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpdir := t.TempDir()
+			confPath := filepath.Join(tmpdir, defaultConfigFile)
+			cfg := &config{
+				conf:      confPath,
+				gitconfig: &gitconfig.Config{GitPath: "git", File: confPath},
+			}
+
+			if tt.envValue != "" {
+				t.Setenv(envFixMajorVersion, tt.envValue)
+			}
+
+			if err := cfg.Reload(); err != nil {
+				t.Fatal(err)
+			}
+
+			got := cfg.FixMajorVersion()
+			if tt.want == nil {
+				if got != nil {
+					t.Errorf("got %v, want nil", *got)
+				}
+			} else {
+				if got == nil {
+					t.Errorf("got nil, want %v", *tt.want)
+				} else if *got != *tt.want {
+					t.Errorf("got %v, want %v", *got, *tt.want)
+				}
+			}
+		})
+	}
+}

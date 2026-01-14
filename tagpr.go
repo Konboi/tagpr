@@ -46,18 +46,31 @@ func (tp *tagpr) latestSemverTag() string {
 		GitPath:   tp.gitPath,
 		TagPrefix: tp.cfg.TagPrefix(),
 	}).VersionStrings()
-	if tp.cfg.vPrefix != nil {
-		for _, v := range vers {
-			// Strip prefix to check vPrefix against semver part
-			semvPart := strings.TrimPrefix(v, tp.normalizedTagPrefix)
+
+	fixMajor := tp.cfg.FixMajorVersion()
+
+	for _, v := range vers {
+		semvPart := strings.TrimPrefix(v, tp.normalizedTagPrefix)
+
+		// Filter by major version if fixMajorVersion is set
+		if fixMajor != nil {
+			sv, err := newSemver(semvPart)
+			if err != nil {
+				continue
+			}
+			if sv.v.Major() != *fixMajor {
+				continue
+			}
+		}
+
+		// Check vPrefix
+		if tp.cfg.vPrefix != nil {
 			if strings.HasPrefix(semvPart, "v") == *tp.cfg.vPrefix {
 				return v
 			}
-		}
-	} else {
-		// When vPrefix is not defined (i.e. first time tagpr setup), just return the first value.
-		if len(vers) > 0 {
-			return vers[0]
+		} else {
+			// When vPrefix is not defined (i.e. first time tagpr setup), just return the first value.
+			return v
 		}
 	}
 	return ""

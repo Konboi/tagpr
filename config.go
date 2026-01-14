@@ -67,6 +67,13 @@ const (
 #         - "tools" produces tags like "tools/v1.2.3"
 #         - "backend/api" produces tags like "backend/api/v1.0.0"
 #
+#   tagpr.fixMajorVersion (Optional)
+#       Fix the major version for releases. When set, tagpr only considers
+#       tags with the specified major version. This is useful for maintaining
+#       multiple major versions in parallel (e.g., v1.x.x and v2.x.x).
+#       Accepts both numeric (1) and v-prefixed (v1) formats.
+#       Example: fixMajorVersion = v1 will only consider v1.x.x tags.
+#
 [tagpr]
 `
 	defaultMajorLabels       = "major"
@@ -86,6 +93,7 @@ const (
 	envMinorLabels           = "TAGPR_MINOR_LABELS"
 	envCommitPrefix          = "TAGPR_COMMIT_PREFIX"
 	envTagPrefix             = "TAGPR_TAG_PREFIX"
+	envFixMajorVersion       = "TAGPR_FIX_MAJOR_VERSION"
 	configReleaseBranch      = "tagpr.releaseBranch"
 	configVersionFile        = "tagpr.versionFile"
 	configVPrefix            = "tagpr.vPrefix"
@@ -99,6 +107,7 @@ const (
 	configMinorLabels        = "tagpr.minorLabels"
 	configCommitPrefix       = "tagpr.commitPrefix"
 	configTagPrefix          = "tagpr.tagPrefix"
+	configFixMajorVersion    = "tagpr.fixMajorVersion"
 )
 
 type config struct {
@@ -115,6 +124,7 @@ type config struct {
 	minorLabels        *string
 	commitPrefix       *string
 	tagPrefix          *string
+	fixMajorVersion    *uint64
 
 	conf      string
 	gitconfig *gitconfig.Config
@@ -164,6 +174,10 @@ func (cfg *config) Reload() error {
 
 	cfg.reloadField(&cfg.tagPrefix, configTagPrefix, envTagPrefix, "")
 
+	if err := cfg.reloadUint64Field(&cfg.fixMajorVersion, envFixMajorVersion, configFixMajorVersion); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -198,6 +212,29 @@ func (cfg *config) reloadBoolField(dst **bool, envVal, gitconfigSrc string) erro
 		}
 	}
 
+	return nil
+}
+
+func (cfg *config) reloadUint64Field(dst **uint64, envVal, gitconfigSrc string) error {
+	parseVersion := func(val string) (uint64, error) {
+		// Accept both "1" and "v1" formats
+		val = strings.TrimPrefix(val, "v")
+		return strconv.ParseUint(val, 10, 64)
+	}
+
+	if val := os.Getenv(envVal); val != "" {
+		if u, err := parseVersion(val); err != nil {
+			return err
+		} else {
+			*dst = github.Ptr(u)
+		}
+	} else {
+		if val, err := cfg.gitconfig.Get(gitconfigSrc); err == nil {
+			if u, err := parseVersion(val); err == nil {
+				*dst = github.Ptr(u)
+			}
+		}
+	}
 	return nil
 }
 
@@ -331,4 +368,8 @@ func (cfg *config) CommitPrefix() string {
 
 func (cfg *config) TagPrefix() string {
 	return stringify(cfg.tagPrefix)
+}
+
+func (cfg *config) FixMajorVersion() *uint64 {
+	return cfg.fixMajorVersion
 }
